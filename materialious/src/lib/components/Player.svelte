@@ -77,11 +77,32 @@
 	let watchProgressTimeout: NodeJS.Timeout;
 	let playerElementResizeObserver: ResizeObserver | undefined;
 	let showVideoRetry = $state(false);
+	let wasInFullscreen = $state(false);
 
 	let player: shaka.Player;
 	let shakaUi: shaka.ui.Overlay;
 
 	const STORAGE_KEY_VOLUME = 'shaka-preferred-volume';
+
+	function trackFullscreenState() {
+		document.addEventListener('fullscreenchange', () => {
+			wasInFullscreen = !!document.fullscreenElement;
+		});
+	}
+
+	async function restoreFullscreenIfNeeded() {
+		const shouldRestore = sessionStorage.getItem('shouldRestoreFullscreen');
+		if (shouldRestore === 'true') {
+			sessionStorage.removeItem('shouldRestoreFullscreen');
+			
+			// Wait a bit for the video to be ready, then enter fullscreen
+			setTimeout(() => {
+				if (shakaUi && shakaUi.getControls()) {
+					shakaUi.getControls()?.toggleFullScreen();
+				}
+			}, 500);
+		}
+	}
 
 	async function updateSeekBarTheme() {
 		if (!shakaUi) return;
@@ -439,6 +460,9 @@
 				| undefined;
 			shakaStatisticsButton?.click();
 		}
+
+		// Restore fullscreen if needed after everything is loaded
+		await restoreFullscreenIfNeeded();
 	}
 
 	async function reloadVideo() {
@@ -523,6 +547,9 @@
 		});
 
 		updateSeekBarTheme();
+
+		// Track fullscreen state changes
+		trackFullscreenState();
 
 		player.addEventListener('error', (event) => {
 			const error = (event as CustomEvent).detail as shaka.util.Error;
@@ -620,8 +647,16 @@
 		});
 
 		playerElement.addEventListener('ended', async () => {
+			// Store current fullscreen state before navigation
+			const isCurrentlyFullscreen = !!document.fullscreenElement;
+			
 			if (!data.playlistId) {
 				if ($playerAutoplayNextByDefaultStore) {
+					// Store fullscreen state in sessionStorage for persistence across navigation
+					if (isCurrentlyFullscreen) {
+						sessionStorage.setItem('shouldRestoreFullscreen', 'true');
+					}
+					
 					goto(
 						`/${$isAndroidTvStore ? 'tv' : 'watch'}/${data.video.recommendedVideos[0].videoId}`,
 						{ replaceState: $isAndroidTvStore }
@@ -655,6 +690,11 @@
 			}
 
 			if (typeof goToVideo !== 'undefined') {
+				// Store fullscreen state before navigation
+				if (isCurrentlyFullscreen) {
+					sessionStorage.setItem('shouldRestoreFullscreen', 'true');
+				}
+				
 				if ($syncPartyConnectionsStore) {
 					$syncPartyConnectionsStore.forEach((conn) => {
 						if (typeof goToVideo === 'undefined') return;
