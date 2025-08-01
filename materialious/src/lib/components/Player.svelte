@@ -90,17 +90,33 @@
 		});
 	}
 
-	async function restoreFullscreenIfNeeded() {
-		const shouldRestore = sessionStorage.getItem('shouldRestoreFullscreen');
-		if (shouldRestore === 'true') {
-			sessionStorage.removeItem('shouldRestoreFullscreen');
+	async function loadNewVideo(videoId: string, playlistId?: string) {
+		try {
+			// Fetch the new video data
+			const response = await fetch(`${get(instanceStore)}/api/v1/videos/${videoId}`);
+			if (!response.ok) throw new Error('Failed to fetch video');
 			
-			// Wait a bit for the video to be ready, then enter fullscreen
-			setTimeout(() => {
-				if (shakaUi && shakaUi.getControls()) {
-					shakaUi.getControls()?.toggleFullScreen();
-				}
-			}, 500);
+			const newVideoData = await response.json();
+			
+			// Update the data object
+			data.video = newVideoData;
+			if (playlistId) {
+				data.playlistId = playlistId;
+			}
+			
+			// Clear existing segments and reload video
+			segments = [];
+			await loadVideo();
+			
+			// Update the URL without navigation to maintain fullscreen
+			const newUrl = `/${$isAndroidTvStore ? 'tv' : 'watch'}/${videoId}${playlistId ? `?playlist=${playlistId}` : ''}`;
+			window.history.replaceState({}, '', newUrl);
+			
+		} catch (error) {
+			console.error('Failed to load new video:', error);
+			// Fallback to navigation if direct loading fails
+			const url = `/${$isAndroidTvStore ? 'tv' : 'watch'}/${videoId}${data.playlistId ? `?playlist=${data.playlistId}` : ''}`;
+			goto(url, { replaceState: $isAndroidTvStore });
 		}
 	}
 
@@ -462,7 +478,7 @@
 		}
 
 		// Restore fullscreen if needed after everything is loaded
-		await restoreFullscreenIfNeeded();
+		// await restoreFullscreenIfNeeded();
 	}
 
 	async function reloadVideo() {
@@ -647,22 +663,22 @@
 		});
 
 		playerElement.addEventListener('ended', async () => {
-			// Store current fullscreen state before navigation
+			// Check if we're in fullscreen mode
 			const isCurrentlyFullscreen = !!document.fullscreenElement;
 			
 			if (!data.playlistId) {
 				if ($playerAutoplayNextByDefaultStore) {
-					// Store fullscreen state in sessionStorage for persistence across navigation
 					if (isCurrentlyFullscreen) {
-						sessionStorage.setItem('shouldRestoreFullscreen', 'true');
+						// Stay in fullscreen, just load new video directly
+						await loadNewVideo(data.video.recommendedVideos[0].videoId);
+					} else {
+						// Not in fullscreen, navigate normally
+						goto(
+							`/${$isAndroidTvStore ? 'tv' : 'watch'}/${data.video.recommendedVideos[0].videoId}`,
+							{ replaceState: $isAndroidTvStore }
+						);
 					}
-					
-					goto(
-						`/${$isAndroidTvStore ? 'tv' : 'watch'}/${data.video.recommendedVideos[0].videoId}`,
-						{ replaceState: $isAndroidTvStore }
-					);
 				}
-
 				return;
 			}
 
@@ -690,11 +706,6 @@
 			}
 
 			if (typeof goToVideo !== 'undefined') {
-				// Store fullscreen state before navigation
-				if (isCurrentlyFullscreen) {
-					sessionStorage.setItem('shouldRestoreFullscreen', 'true');
-				}
-				
 				if ($syncPartyConnectionsStore) {
 					$syncPartyConnectionsStore.forEach((conn) => {
 						if (typeof goToVideo === 'undefined') return;
@@ -708,10 +719,16 @@
 					});
 				}
 
-				goto(
-					`/${$isAndroidTvStore ? 'tv' : 'watch'}/${goToVideo.videoId}?playlist=${data.playlistId}`,
-					{ replaceState: $isAndroidTvStore }
-				);
+				if (isCurrentlyFullscreen) {
+					// Stay in fullscreen, just load new video directly
+					await loadNewVideo(goToVideo.videoId, data.playlistId);
+				} else {
+					// Not in fullscreen, navigate normally
+					goto(
+						`/${$isAndroidTvStore ? 'tv' : 'watch'}/${goToVideo.videoId}?playlist=${data.playlistId}`,
+						{ replaceState: $isAndroidTvStore }
+					);
+				}
 			}
 		});
 
