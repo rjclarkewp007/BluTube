@@ -1,7 +1,7 @@
 <div align="center">  <img src="./materialious/static/logo.svg" width="200px" />
   <br />
   <br />
-  <h1>Materialious</h1>
+  <h1>BluTube (Materialious)</h1>
   <quote>
     Modern material design for Invidious.
   </quote>
@@ -38,6 +38,9 @@
 - Playlists.
 - PWA support.
 - YT path redirects (So your redirect plugins should still work!)
+
+# Added Features by RJCLARKEWP007
+- Player stays in full screen mode when playing next video (Web)
 
 # Support table
 |         | Dash | HLS | Local video fallback | API-Extended | Dearrow | RYD | Watch Parties |
