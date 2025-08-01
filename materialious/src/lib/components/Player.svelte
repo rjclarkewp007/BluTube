@@ -1,8 +1,9 @@
+<script lang="ts">
 import { page } from '$app/stores';
 import '$lib/css/shaka-player-theme.css';
 import { getBestThumbnail } from '$lib/images';
 import { padTime, videoLength } from '$lib/numbers';
-import { type PhasedDescription } from '$lib/timestamps';
+import type { PhasedDescription } from '$lib/timestamps';
 import { Capacitor } from '@capacitor/core';
 import { ScreenOrientation, type ScreenOrientationResult } from '@capacitor/screen-orientation';
 import { StatusBar, Style } from '@capacitor/status-bar';
