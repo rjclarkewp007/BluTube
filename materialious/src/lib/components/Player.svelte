@@ -84,118 +84,13 @@
 
 	const STORAGE_KEY_VOLUME = 'shaka-preferred-volume';
 
-	function setupMediaSession() {
-		if ('mediaSession' in navigator && playerElement) {
-			// Set metadata
-			navigator.mediaSession.metadata = new MediaMetadata({
-				title: data.video.title,
-				artist: data.video.author,
-				album: data.playlistId ? 'Playlist' : 'Video',
-				artwork: data.video.videoThumbnails?.map(thumb => ({
-					src: thumb.url.startsWith('http') ? thumb.url : `${get(instanceStore)}${thumb.url}`,
-					sizes: `${thumb.width}x${thumb.height}`,
-					type: 'image/jpeg'
-				})) || []
-			});
-
-			// Set up action handlers
-			navigator.mediaSession.setActionHandler('play', () => {
-				if (playerElement) {
-					playerElement.play();
-				}
-			});
-
-			navigator.mediaSession.setActionHandler('pause', () => {
-				if (playerElement) {
-					playerElement.pause();
-				}
-			});
-
-			navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-				if (playerElement) {
-					const skipTime = details.seekOffset || 10;
-					playerElement.currentTime = Math.max(playerElement.currentTime - skipTime, 0);
-				}
-			});
-
-			navigator.mediaSession.setActionHandler('seekforward', (details) => {
-				if (playerElement) {
-					const skipTime = details.seekOffset || 10;
-					playerElement.currentTime = Math.min(playerElement.currentTime + skipTime, playerElement.duration);
-				}
-			});
-
-			navigator.mediaSession.setActionHandler('seekto', (details) => {
-				if (playerElement && details.seekTime) {
-					playerElement.currentTime = details.seekTime;
-				}
-			});
-
-			// Handle next/previous track for playlists
-			if (data.playlistId) {
-				navigator.mediaSession.setActionHandler('nexttrack', async () => {
-					// Trigger the same logic as the 'ended' event
-					const event = new Event('ended');
-					playerElement?.dispatchEvent(event);
-				});
-
-				navigator.mediaSession.setActionHandler('previoustrack', async () => {
-					// Go to previous video in playlist
-					if (data.playlistId) {
-						const playlist = await loadEntirePlaylist(data.playlistId);
-						const playlistVideoIds = playlist.videos.map(v => v.videoId);
-						const currentIndex = playlistVideoIds.indexOf(data.video.videoId);
-						
-						if (currentIndex > 0) {
-							const previousVideo = playlist.videos[currentIndex - 1];
-							const isCurrentlyFullscreen = !!document.fullscreenElement;
-							
-							if (isCurrentlyFullscreen) {
-								await loadNewVideo(previousVideo.videoId, data.playlistId);
-							} else {
-								goto(`/${$isAndroidTvStore ? 'tv' : 'watch'}/${previousVideo.videoId}?playlist=${data.playlistId}`, 
-									{ replaceState: $isAndroidTvStore });
-							}
-						}
-					}
-				});
-			}
-
-			// Update playback state
-			const updatePlaybackState = () => {
-				if (playerElement) {
-					navigator.mediaSession.playbackState = playerElement.paused ? 'paused' : 'playing';
-				}
-			};
-
-			playerElement.addEventListener('play', updatePlaybackState);
-			playerElement.addEventListener('pause', updatePlaybackState);
-			playerElement.addEventListener('ended', () => {
-				navigator.mediaSession.playbackState = 'none';
-			});
-
-			// Update position state periodically
-			const updatePositionState = () => {
-				if (playerElement && playerElement.duration) {
-					navigator.mediaSession.setPositionState({
-						duration: playerElement.duration,
-						playbackRate: playerElement.playbackRate,
-						position: playerElement.currentTime
-					});
-				}
-			};
-
-			playerElement.addEventListener('loadedmetadata', updatePositionState);
-			playerElement.addEventListener('timeupdate', updatePositionState);
-			playerElement.addEventListener('ratechange', updatePositionState);
-		}
-	}
-
 	function trackFullscreenState() {
 		document.addEventListener('fullscreenchange', () => {
 			wasInFullscreen = !!document.fullscreenElement;
 		});
 	}
+
+	async function loadNewVideo(videoId: string, playlistId?: string) {
 		try {
 			// Fetch the new video data
 			const response = await fetch(`${get(instanceStore)}/api/v1/videos/${videoId}`);
@@ -216,9 +111,6 @@
 			// Update the URL without navigation to maintain fullscreen
 			const newUrl = `/${$isAndroidTvStore ? 'tv' : 'watch'}/${videoId}${playlistId ? `?playlist=${playlistId}` : ''}`;
 			window.history.replaceState({}, '', newUrl);
-			
-			// Update media session with new video info
-			setupMediaSession();
 			
 		} catch (error) {
 			console.error('Failed to load new video:', error);
@@ -587,9 +479,6 @@
 
 		// Restore fullscreen if needed after everything is loaded
 		// await restoreFullscreenIfNeeded();
-
-		// Set up media session for background audio and lock screen controls
-		setupMediaSession();
 	}
 
 	async function reloadVideo() {
@@ -1005,18 +894,6 @@
 		aspect-ratio: 16 / 9;
 	}
 
-	.tv-contain-video {
-		height: 100vh;
-		width: calc(100vh * 16 / 9);
-		max-width: 100vw;
-		max-height: 100vh;
-		overflow: hidden;
-		position: relative;
-		flex: 1;
-		background-color: black;
-		aspect-ratio: 16 / 9;
-	}
-
 	video[poster] {
 		height: 100%;
 		width: 100%;
@@ -1045,4 +922,16 @@
 		align-items: center;
 		justify-content: center;
 	}
-</style>
+</style> / 9;
+	}
+
+	.tv-contain-video {
+		height: 100vh;
+		width: calc(100vh * 16 / 9);
+		max-width: 100vw;
+		max-height: 100vh;
+		overflow: hidden;
+		position: relative;
+		flex: 1;
+		background-color: black;
+		aspect-ratio: 16
