@@ -77,11 +77,48 @@
 	let watchProgressTimeout: NodeJS.Timeout;
 	let playerElementResizeObserver: ResizeObserver | undefined;
 	let showVideoRetry = $state(false);
+	let wasInFullscreen = $state(false);
 
 	let player: shaka.Player;
 	let shakaUi: shaka.ui.Overlay;
 
 	const STORAGE_KEY_VOLUME = 'shaka-preferred-volume';
+
+	function trackFullscreenState() {
+		document.addEventListener('fullscreenchange', () => {
+			wasInFullscreen = !!document.fullscreenElement;
+		});
+	}
+
+	async function loadNewVideo(videoId: string, playlistId?: string) {
+		try {
+			// Fetch the new video data
+			const response = await fetch(`${get(instanceStore)}/api/v1/videos/${videoId}`);
+			if (!response.ok) throw new Error('Failed to fetch video');
+			
+			const newVideoData = await response.json();
+			
+			// Update the data object
+			data.video = newVideoData;
+			if (playlistId) {
+				data.playlistId = playlistId;
+			}
+			
+			// Clear existing segments and reload video
+			segments = [];
+			await loadVideo();
+			
+			// Update the URL without navigation to maintain fullscreen
+			const newUrl = `/${$isAndroidTvStore ? 'tv' : 'watch'}/${videoId}${playlistId ? `?playlist=${playlistId}` : ''}`;
+			window.history.replaceState({}, '', newUrl);
+			
+		} catch (error) {
+			console.error('Failed to load new video:', error);
+			// Fallback to navigation if direct loading fails
+			const url = `/${$isAndroidTvStore ? 'tv' : 'watch'}/${videoId}${data.playlistId ? `?playlist=${data.playlistId}` : ''}`;
+			goto(url, { replaceState: $isAndroidTvStore });
+		}
+	}
 
 	async function updateSeekBarTheme() {
 		if (!shakaUi) return;
@@ -439,6 +476,9 @@
 				| undefined;
 			shakaStatisticsButton?.click();
 		}
+
+		// Restore fullscreen if needed after everything is loaded
+		// await restoreFullscreenIfNeeded();
 	}
 
 	async function reloadVideo() {
@@ -523,6 +563,9 @@
 		});
 
 		updateSeekBarTheme();
+
+		// Track fullscreen state changes
+		trackFullscreenState();
 
 		player.addEventListener('error', (event) => {
 			const error = (event as CustomEvent).detail as shaka.util.Error;
@@ -620,14 +663,22 @@
 		});
 
 		playerElement.addEventListener('ended', async () => {
+			// Check if we're in fullscreen mode
+			const isCurrentlyFullscreen = !!document.fullscreenElement;
+			
 			if (!data.playlistId) {
 				if ($playerAutoplayNextByDefaultStore) {
-					goto(
-						`/${$isAndroidTvStore ? 'tv' : 'watch'}/${data.video.recommendedVideos[0].videoId}`,
-						{ replaceState: $isAndroidTvStore }
-					);
+					if (isCurrentlyFullscreen) {
+						// Stay in fullscreen, just load new video directly
+						await loadNewVideo(data.video.recommendedVideos[0].videoId);
+					} else {
+						// Not in fullscreen, navigate normally
+						goto(
+							`/${$isAndroidTvStore ? 'tv' : 'watch'}/${data.video.recommendedVideos[0].videoId}`,
+							{ replaceState: $isAndroidTvStore }
+						);
+					}
 				}
-
 				return;
 			}
 
@@ -668,10 +719,16 @@
 					});
 				}
 
-				goto(
-					`/${$isAndroidTvStore ? 'tv' : 'watch'}/${goToVideo.videoId}?playlist=${data.playlistId}`,
-					{ replaceState: $isAndroidTvStore }
-				);
+				if (isCurrentlyFullscreen) {
+					// Stay in fullscreen, just load new video directly
+					await loadNewVideo(goToVideo.videoId, data.playlistId);
+				} else {
+					// Not in fullscreen, navigate normally
+					goto(
+						`/${$isAndroidTvStore ? 'tv' : 'watch'}/${goToVideo.videoId}?playlist=${data.playlistId}`,
+						{ replaceState: $isAndroidTvStore }
+					);
+				}
 			}
 		});
 
@@ -837,18 +894,6 @@
 		aspect-ratio: 16 / 9;
 	}
 
-	.tv-contain-video {
-		height: 100vh;
-		width: calc(100vh * 16 / 9);
-		max-width: 100vw;
-		max-height: 100vh;
-		overflow: hidden;
-		position: relative;
-		flex: 1;
-		background-color: black;
-		aspect-ratio: 16 / 9;
-	}
-
 	video[poster] {
 		height: 100%;
 		width: 100%;
@@ -877,4 +922,16 @@
 		align-items: center;
 		justify-content: center;
 	}
-</style>
+</style> / 9;
+	}
+
+	.tv-contain-video {
+		height: 100vh;
+		width: calc(100vh * 16 / 9);
+		max-width: 100vw;
+		max-height: 100vh;
+		overflow: hidden;
+		position: relative;
+		flex: 1;
+		background-color: black;
+		aspect-ratio: 16
